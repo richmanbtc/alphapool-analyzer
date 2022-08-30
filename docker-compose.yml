@@ -1,0 +1,36 @@
+version: "3"
+services:
+  grafana:
+    image: grafana/grafana-oss
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./dashboards/alphapool.js:/usr/share/grafana/public/dashboards/alphapool.js:ro
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_USER=alphapool
+      - GF_SECURITY_ADMIN_PASSWORD
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "32m"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  analyzer:
+    build: ./docker_images/analyzer
+    volumes:
+      - ./src:/app/src:ro
+    working_dir: /app
+    environment:
+      ALPHAPOOL_DATABASE_URL: 'postgresql://postgres:postgres@host.docker.internal/alphapool'
+      ALPHAPOOL_LOG_LEVEL: debug
+    command: [ 'python', '-m', 'src.main' ]
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "32m"
+
