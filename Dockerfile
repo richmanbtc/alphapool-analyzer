@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir \
     dataset==1.5.2 \
     psycopg2==2.9.3
 
+ADD . /app
 ENV ALPHAPOOL_LOG_LEVEL debug
 WORKDIR /app
 CMD python -m src.main
