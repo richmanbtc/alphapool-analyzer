@@ -43,6 +43,7 @@ def start():
         logger.debug(df)
 
         symbols = df.columns.str.replace("p.", "", regex=False).to_list()
+        symbols = [symbol for symbol in symbols if not symbol.startswith('w.')]
         logger.debug(symbols)
 
         rows = []
