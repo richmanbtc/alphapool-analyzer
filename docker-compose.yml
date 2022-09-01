@@ -20,17 +20,14 @@ services:
       - "host.docker.internal:host-gateway"
 
   analyzer:
-    build: ./docker_images/analyzer
+    build: .
     volumes:
       - ./src:/app/src:ro
-    working_dir: /app
     environment:
       ALPHAPOOL_DATABASE_URL: 'postgresql://postgres:postgres@host.docker.internal/alphapool'
       ALPHAPOOL_LOG_LEVEL: debug
-    command: [ 'python', '-m', 'src.main' ]
     restart: always
     logging:
       driver: "json-file"
       options:
         max-size: "32m"
-

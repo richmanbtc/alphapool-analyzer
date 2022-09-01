@@ -3,7 +3,6 @@ import os
 import time
 import pandas as pd
 import dataset
-import schedule
 from alphapool import Client
 from .market_data_store.data_fetcher_builder import DataFetcherBuilder
 from .market_data_store.market_data_store import MarketDataStore
@@ -86,15 +85,7 @@ def start():
 
         logger.info("job finished")
 
-    logger.info("initial job")
     job()
-
-    for hour in range(0, 24, 1):
-        schedule.every().day.at("{:02}:01".format(hour)).do(job)
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
 
 
 start()

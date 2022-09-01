@@ -9,3 +9,7 @@ RUN pip install --no-cache-dir \
     "git+https://github.com/richmanbtc/alphapool.git@v0.0.5#egg=alphapool" \
     dataset==1.5.2 \
     psycopg2==2.9.3
+
+ENV ALPHAPOOL_LOG_LEVEL debug
+WORKDIR /app
+CMD python -m src.main
