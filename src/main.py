@@ -30,9 +30,7 @@ def start():
     )
 
     analyzer_positions = db.create_table('analyzer_positions')
-    analyzer_positions.create_index(['timestamp', 'model_id'])
     analyzer_rets = db.create_table('analyzer_rets')
-    analyzer_rets.create_index(['timestamp', 'model_id'])
 
     def job():
         logger.info("job started")
@@ -82,6 +80,9 @@ def start():
         with db:
             analyzer_rets.delete()
             analyzer_rets.insert_many(rows)
+
+        analyzer_positions.create_index(['timestamp', 'model_id'])
+        analyzer_rets.create_index(['timestamp', 'model_id'])
 
         logger.info("job finished")
 
