@@ -3,11 +3,20 @@ import os
 import time
 import pandas as pd
 import dataset
+from sqlalchemy import create_engine
+from sqlalchemy.sql import text
 from alphapool import Client
 from .market_data_store.data_fetcher_builder import DataFetcherBuilder
 from .market_data_store.market_data_store import MarketDataStore
 from .logger import create_logger
 from .processing import preprocess_df, calc_model_ret
+
+
+def vacuum(database_url):
+    engine = create_engine(database_url)
+    with engine.connect() as conn:
+        statement = text('VACUUM')
+        conn.execution_options(isolation_level="AUTOCOMMIT").execute(statement)
 
 
 def start():
@@ -37,6 +46,8 @@ def start():
         execution_time = math.floor(time.time() / interval) * interval
         execution_time = pd.to_datetime(execution_time, unit="s", utc=True)
         logger.info("execution_time {}".format(execution_time))
+
+        vacuum(database_url)
 
         df = client.get_positions(tournament="crypto")
         df = preprocess_df(df, execution_time)
