@@ -15,7 +15,7 @@ from .processing import preprocess_df, calc_model_ret
 def vacuum(database_url):
     engine = create_engine(database_url)
     with engine.connect() as conn:
-        statement = text('VACUUM')
+        statement = text('VACUUM FULL')
         conn.execution_options(isolation_level="AUTOCOMMIT").execute(statement)
 
 
@@ -45,11 +45,13 @@ def start():
         logger.info("job started")
         execution_time = math.floor(time.time() / interval) * interval
         execution_time = pd.to_datetime(execution_time, unit="s", utc=True)
+        min_update_time = execution_time - pd.to_timedelta(2, unit="D")
         logger.info("execution_time {}".format(execution_time))
+        logger.info("min_update_time {}".format(min_update_time))
 
         vacuum(database_url)
 
-        df = client.get_positions(tournament="crypto")
+        df = client.get_positions(tournament="crypto", min_timestamp=min_update_time.timestamp())
         df = preprocess_df(df, execution_time)
         logger.debug(df)
 
@@ -70,7 +72,7 @@ def start():
             df2['symbol'] = col.replace('p.', '').replace('w.', '')
             rows += df2.to_dict('records')
         with db:
-            analyzer_positions.delete()
+            analyzer_positions.delete(timestamp={ 'gte': min_update_time.timestamp() })
             analyzer_positions.insert_many(rows)
 
         df_ret = market_data_store.fetch_df_market(symbols=symbols)
@@ -90,7 +92,7 @@ def start():
             df2['model_id'] = col.replace('ret.', '')
             rows += df2.to_dict('records')
         with db:
-            analyzer_rets.delete()
+            analyzer_rets.delete(timestamp={ 'gte': min_update_time.timestamp() })
             analyzer_rets.insert_many(rows)
 
         analyzer_positions.create_index(['timestamp', 'model_id'])
