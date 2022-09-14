@@ -52,7 +52,7 @@ def start():
         logger.info("vacuum")
         vacuum(database_url)
 
-        df = client.get_positions(tournament="crypto", min_timestamp=min_update_time.timestamp())
+        df = client.get_positions(tournament="crypto", min_timestamp=int(min_update_time.timestamp()))
         df = preprocess_df(df, execution_time)
         logger.debug(df)
 
@@ -73,7 +73,7 @@ def start():
             df2['symbol'] = col.replace('p.', '').replace('w.', '')
             rows += df2.to_dict('records')
         with db:
-            analyzer_positions.delete(timestamp={ 'gte': min_update_time.timestamp() })
+            analyzer_positions.delete(timestamp={ 'gte': int(min_update_time.timestamp()) })
             analyzer_positions.insert_many(rows)
 
         df_ret = market_data_store.fetch_df_market(symbols=symbols)
@@ -93,7 +93,7 @@ def start():
             df2['model_id'] = col.replace('ret.', '')
             rows += df2.to_dict('records')
         with db:
-            analyzer_rets.delete(timestamp={ 'gte': min_update_time.timestamp() })
+            analyzer_rets.delete(timestamp={ 'gte': int(min_update_time.timestamp()) })
             analyzer_rets.insert_many(rows)
 
         analyzer_positions.create_index(['timestamp', 'model_id'])
