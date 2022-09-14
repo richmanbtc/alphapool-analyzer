@@ -15,7 +15,7 @@ from .processing import preprocess_df, calc_model_ret
 def vacuum(database_url):
     engine = create_engine(database_url)
     with engine.connect() as conn:
-        statement = text('VACUUM FULL')
+        statement = text('VACUUM')
         conn.execution_options(isolation_level="AUTOCOMMIT").execute(statement)
 
 
@@ -49,6 +49,7 @@ def start():
         logger.info("execution_time {}".format(execution_time))
         logger.info("min_update_time {}".format(min_update_time))
 
+        logger.info("vacuum")
         vacuum(database_url)
 
         df = client.get_positions(tournament="crypto", min_timestamp=min_update_time.timestamp())
