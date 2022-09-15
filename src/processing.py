@@ -2,6 +2,18 @@ import numpy as np
 import pandas as pd
 
 
+def calc_portfolio_positions(df):
+    df = df.copy()
+    model_count = df.reset_index()['model_id'].unique().size
+    symbol_cols = [x for x in df.columns if x.startswith("p.")]
+    for col in df.columns:
+        if col.startswith("w."):
+            model_id = col.replace("w.", "")
+            idx = df.index.set_levels([model_id] * model_count, level='model_id')
+            df.loc[:, symbol_cols] += df[col] * df.loc[idx, symbol_cols]
+    return df
+
+
 def calc_model_ret(df):
     model_ret = None
     for col in df.columns:
