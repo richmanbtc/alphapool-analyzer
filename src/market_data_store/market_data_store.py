@@ -20,10 +20,10 @@ class MarketDataStore:
         dfs = []
         for symbol in symbols:
             df = self._get_df_ohlcv(
-                exchange="ftx",
-                market=symbol + "-PERP",
+                exchange="binance_future",
+                market=symbol + "USDT",
                 interval=self._interval,
-                price_type="index",
+                price_type=None,
                 force_fetch=True,
             )
 
