@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 
 def calc_portfolio_positions(df):
@@ -92,3 +93,23 @@ def asfreq_positions(df, freq, max_timestamp):
         dfs.append(df_model)
 
     return pd.concat(dfs).reset_index().set_index(["model_id", "timestamp"])
+
+
+def convert_to_old_format(df):
+    df = df.reset_index()
+    dfs = [df[["model_id", "timestamp", "delay"]]]
+
+    def add_flattened(prefix, col):
+        if col not in df.columns:
+            return
+        df_flattened = pd.json_normalize(df[col].where(~df[col].isna(), {}))
+        df_flattened.columns = prefix + df_flattened.columns
+        if df_flattened.shape[1] > 0 and is_numeric_dtype(df_flattened.iloc[:, 0]):
+            dfs.append(df_flattened)
+
+    add_flattened("p.", "positions")
+    add_flattened("w.", "weights")
+
+    df = pd.concat(dfs, axis=1)
+    df = df.set_index(["model_id", "timestamp"]).sort_index()
+    return df

@@ -23,9 +23,12 @@ services:
     build: .
     volumes:
       - ./src:/app/src:ro
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./LICENSE}:/google_credentials.json:ro
     environment:
-      ALPHAPOOL_DATABASE_URL: 'postgresql://postgres:postgres@host.docker.internal/alphapool'
+      ALPHAPOOL_DATABASE_URL: 'postgresql://postgres:password@host.docker.internal/postgres'
       ALPHAPOOL_LOG_LEVEL: debug
+      GOOGLE_APPLICATION_CREDENTIALS: /google_credentials.json
+      ALPHAPOOL_DATASET: ${ALPHAPOOL_DATASET}
     restart: always
     logging:
       driver: "json-file"

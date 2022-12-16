@@ -6,10 +6,12 @@ import dataset
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 from alphapool import Client
-from .market_data_store.data_fetcher_builder import DataFetcherBuilder
-from .market_data_store.market_data_store import MarketDataStore
 from .logger import create_logger
-from .processing import preprocess_df, calc_model_ret, calc_portfolio_positions
+from .processing import (
+    preprocess_df, calc_model_ret, calc_portfolio_positions,
+    convert_to_old_format
+)
+from .data_fetcher import DataFetcher
 
 
 def vacuum(database_url):
@@ -19,10 +21,39 @@ def vacuum(database_url):
         conn.execution_options(isolation_level="AUTOCOMMIT").execute(statement)
 
 
+def fetch_df_market(symbols, min_timestamp):
+    provider_configs = [
+        {
+            'provider': 'bigquery',
+            'options': {
+                'table': 'binance_ohlcv_5m',
+                'symbols': ['{}USDT'.format(x) for x in symbols],
+            }
+        },
+    ]
+    dfs = DataFetcher().fetch(provider_configs=provider_configs, min_timestamp=min_timestamp)
+    df = dfs[0]
+    df['symbol'] = df['symbol'].str.replace('USDT', '')
+
+    dfs = []
+    for symbol, df_symbol in df.groupby('symbol'):
+        df_symbol = df_symbol.sort_values('timestamp')
+        df_symbol = df_symbol.drop_duplicates("timestamp", keep="last")
+        df_symbol["ret." + symbol] = df_symbol["cl"].shift(-1) / df_symbol["cl"] - 1
+        df_symbol = df_symbol.dropna()
+
+        df_symbol = df_symbol.set_index(["timestamp"])
+        dfs.append(df_symbol[["ret." + symbol]])
+
+    df = pd.concat(dfs, axis=1)
+    df = df.sort_index()
+
+    return df
+
+
 def start():
     log_level = os.getenv("ALPHAPOOL_LOG_LEVEL")
     interval = 5 * 60
-    tournament = "crypto"
 
     logger = create_logger(log_level)
 
@@ -44,7 +75,7 @@ def start():
         logger.info("execution_time {}".format(execution_time))
 
         if analyzer_positions.count() == 0:
-            df = client.get_positions(tournament="crypto")
+            df = client.get_positions()
             min_update_time = df.index.get_level_values('timestamp').min()
             min_fetch_time = min_update_time
         else:
@@ -53,7 +84,9 @@ def start():
                 utc=True)
             min_update_time = last_position_time - pd.to_timedelta(1, unit="D")
             min_fetch_time = min_update_time - pd.to_timedelta(1, unit="D")
-            df = client.get_positions(tournament="crypto", min_timestamp=min_fetch_time.timestamp())
+            df = client.get_positions(min_timestamp=min_fetch_time.timestamp())
+
+        df = convert_to_old_format(df)
 
         logger.info("min_update_time {}".format(min_update_time))
         logger.info("min_fetch_time {}".format(min_fetch_time))
@@ -76,19 +109,10 @@ def start():
             ], axis=1)
             df2 = df2.reset_index()
             df2 = df2[df2['timestamp'] >= min_update_time]
-            df2['tournament'] = tournament
             df2['symbol'] = col.replace('p.', '').replace('w.', '')
             position_rows += df2.to_dict('records')
 
-        data_fetcher_builder = DataFetcherBuilder()
-        market_data_store = MarketDataStore(
-            data_fetcher_builder=data_fetcher_builder,
-            start_time=min_fetch_time.timestamp(),
-            logger=logger,
-            interval=5 * 60,
-        )
-
-        df_ret = market_data_store.fetch_df_market(symbols=symbols)
+        df_ret = fetch_df_market(symbols=symbols, min_timestamp=min_fetch_time.timestamp())
         df = df.join(df_ret).dropna()
         logger.debug(df_ret)
 
@@ -102,7 +126,6 @@ def start():
             ], axis=1)
             df2 = df2.reset_index()
             df2 = df2[df2['timestamp'] >= min_update_time]
-            df2['tournament'] = tournament
             df2['model_id'] = col.replace('ret.', '')
             ret_rows += df2.to_dict('records')
 
