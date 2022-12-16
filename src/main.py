@@ -74,17 +74,9 @@ def start():
         execution_time = pd.to_datetime(execution_time, unit="s", utc=True)
         logger.info("execution_time {}".format(execution_time))
 
-        if analyzer_positions.count() == 0:
-            df = client.get_positions()
-            min_update_time = df.index.get_level_values('timestamp').min()
-            min_fetch_time = min_update_time
-        else:
-            last_position_time = pd.to_datetime(
-                analyzer_positions.find_one(order_by=['-timestamp'])['timestamp'],
-                utc=True)
-            min_update_time = last_position_time - pd.to_timedelta(1, unit="D")
-            min_fetch_time = min_update_time - pd.to_timedelta(1, unit="D")
-            df = client.get_positions(min_timestamp=min_fetch_time.timestamp())
+        min_update_time = execution_time - pd.to_timedelta(7, unit="D")
+        min_fetch_time = min_update_time - pd.to_timedelta(1, unit="D")
+        df = client.get_positions(min_timestamp=min_fetch_time.timestamp())
 
         df = convert_to_old_format(df)
 
