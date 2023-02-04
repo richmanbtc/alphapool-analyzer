@@ -26,3 +26,13 @@ Cloud SQL storage rapidly grows
 timeout
 
 - It appears to be taking a long time to insert analyzer_positions.
+
+postgresql auto increment error
+
+- https://stackoverflow.com/questions/56533378/postgresql-set-max-value-for-sequence-to-a-higher-value
+- Modified code to use bigint. If the table has already been created, it can be modified with the following sql
+
+```sql
+ALTER TABLE table_name ALTER COLUMN id TYPE BIGINT;
+ALTER SEQUENCE table_name_id_seq AS bigint MAXVALUE 9223372036854775807;
+```
