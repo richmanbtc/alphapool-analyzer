@@ -61,8 +61,14 @@ def start():
     db = dataset.connect(database_url)
     client = Client(db)
 
-    analyzer_positions = db.create_table('analyzer_positions')
-    analyzer_rets = db.create_table('analyzer_rets')
+    analyzer_positions = db.create_table(
+        'analyzer_positions',
+        primary_type=db.types.bigint,
+    )
+    analyzer_rets = db.create_table(
+        'analyzer_rets',
+        primary_type=db.types.bigint,
+    )
 
     def job():
         logger.info("job started")
