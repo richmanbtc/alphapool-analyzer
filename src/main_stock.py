@@ -39,19 +39,22 @@ def fetch_df_market(symbols, min_timestamp):
 
         def calc_clop(df):
             df = df.copy()
-            df['timestamp'] += 6 * 60
+            df['timestamp'] += pd.to_timedelta(6, unit='H')
             df["adj_op"] = df["op"] * df['adj_cl'] / df['cl']
             df["ret." + symbol] = df["adj_op"].shift(-1) / df["adj_cl"] - 1
             df = df.dropna()
             return df.set_index(["timestamp"])
 
         dfs += [
-            calc_opcl(df_symbol)[["ret." + symbol]],
-            calc_clop(df_symbol)[["ret." + symbol]],
+            pd.concat([
+                calc_opcl(df_symbol)[["ret." + symbol]],
+                calc_clop(df_symbol)[["ret." + symbol]],
+            ])
         ]
 
     df = pd.concat(dfs, axis=1)
     df = df.sort_index()
+    df = df.fillna(0)
 
     return df
 
@@ -94,8 +97,15 @@ def start():
         logger.info("min_update_time {}".format(min_update_time))
         logger.info("min_fetch_time {}".format(min_fetch_time))
 
-        df = preprocess_df(df, execution_time)
-        df = calc_portfolio_positions(df)
+        df = preprocess_df(df, execution_time, inactive_days=7, disable_asfreq=True)
+        # df = calc_portfolio_positions(df)
+        def calc_equal_weighted(df):
+            symbol_cols = [x for x in df.columns if x.startswith("p.")]
+            df2 = df.groupby('timestamp')[symbol_cols].mean()
+            df2['model_id'] = 'pf-equal'
+            df2 = df2.reset_index().set_index(["model_id", "timestamp"])
+            return df.append(df2).sort_index()
+        df = calc_equal_weighted(df)
         logger.debug(df)
 
         symbols = df.columns.str.replace("p.", "", regex=False).to_list()
@@ -119,7 +129,7 @@ def start():
         df = df.join(df_ret).dropna()
         logger.debug(df_ret)
 
-        df_model_ret = calc_model_ret(df).dropna()
+        df_model_ret = calc_model_ret(df).fillna(0).dropna()
         logger.debug(df_model_ret)
 
         ret_rows = []

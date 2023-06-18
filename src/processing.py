@@ -30,19 +30,20 @@ def calc_model_ret(df):
     return model_ret.unstack(level=0)
 
 
-def preprocess_df(df, execution_time):
+def preprocess_df(df, execution_time, inactive_days=1, disable_asfreq=False):
     df = df.fillna(0)
     df = df.filter(regex="^(p|w).", axis=1)
     for col in df.columns:
         if df[col].abs().sum() == 0:
             df = df.drop(col, axis=1)
     df = remove_portfolio_models(df)
-    df = remove_inactive_models(df, execution_time - pd.to_timedelta(1, unit="D"))
+    df = remove_inactive_models(df, execution_time - pd.to_timedelta(inactive_days, unit="D"))
     # TODO: consider delay
     # df = convert_to_executable_time(df, 4 * 60)
-    df = asfreq_positions(
-        df, "300S", execution_time
-    )
+    if not disable_asfreq:
+        df = asfreq_positions(
+            df, "300S", execution_time
+        )
     return df
 
 
