@@ -18,24 +18,37 @@ def fetch_df_market(symbols, min_timestamp):
         {
             'provider': 'bigquery',
             'options': {
-                'table': 'binance_ohlcv_5m',
-                'symbols': ['{}USDT'.format(x) for x in symbols],
+                'table': 'stock_ohlcv',
+                'symbols': symbols,
             }
         },
     ]
     dfs = DataFetcher().fetch(provider_configs=provider_configs, min_timestamp=min_timestamp)
     df = dfs[0]
-    df['symbol'] = df['symbol'].str.replace('USDT', '')
 
     dfs = []
     for symbol, df_symbol in df.groupby('symbol'):
         df_symbol = df_symbol.sort_values('timestamp')
         df_symbol = df_symbol.drop_duplicates("timestamp", keep="last")
-        df_symbol["ret." + symbol] = df_symbol["cl"].shift(-1) / df_symbol["cl"] - 1
-        df_symbol = df_symbol.dropna()
 
-        df_symbol = df_symbol.set_index(["timestamp"])
-        dfs.append(df_symbol[["ret." + symbol]])
+        def calc_opcl(df):
+            df = df.copy()
+            df["ret." + symbol] = df["cl"] / df["op"] - 1
+            df = df.dropna()
+            return df.set_index(["timestamp"])
+
+        def calc_clop(df):
+            df = df.copy()
+            df['timestamp'] += 6 * 60
+            df["adj_op"] = df["op"] * df['adj_cl'] / df['cl']
+            df["ret." + symbol] = df["adj_op"].shift(-1) / df["adj_cl"] - 1
+            df = df.dropna()
+            return df.set_index(["timestamp"])
+
+        dfs += [
+            calc_opcl(df_symbol)[["ret." + symbol]],
+            calc_clop(df_symbol)[["ret." + symbol]],
+        ]
 
     df = pd.concat(dfs, axis=1)
     df = df.sort_index()
@@ -72,7 +85,7 @@ def start():
         execution_time = pd.to_datetime(execution_time, unit="s", utc=True)
         logger.info("execution_time {}".format(execution_time))
 
-        min_update_time = execution_time - pd.to_timedelta(7, unit="D")
+        min_update_time = execution_time - pd.to_timedelta(2 * 28, unit="D")
         min_fetch_time = min_update_time - pd.to_timedelta(1, unit="D")
         df = client.get_positions(min_timestamp=min_fetch_time.timestamp())
 
