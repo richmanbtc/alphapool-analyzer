@@ -8,7 +8,8 @@ RUN pip install --no-cache-dir \
     dataset==1.5.2 \
     psycopg2==2.9.3 \
     joblib==1.2.0 \
-    'google-cloud-bigquery[bqstorage,pandas]==3.4.1'
+    'google-cloud-bigquery[bqstorage,pandas]==3.4.1' \
+    SQLAlchemy==1.4.45
 
 ADD . /app
 ENV ALPHAPOOL_LOG_LEVEL debug
