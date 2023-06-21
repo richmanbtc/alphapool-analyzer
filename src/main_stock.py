@@ -18,13 +18,15 @@ def fetch_df_market(symbols, min_timestamp):
         {
             'provider': 'bigquery',
             'options': {
-                'table': 'stock_ohlcv',
+                'table': 'jq_ohlcv',
                 'symbols': symbols,
             }
         },
     ]
     dfs = DataFetcher().fetch(provider_configs=provider_configs, min_timestamp=min_timestamp)
     df = dfs[0]
+
+    df['adj_cl'] = df['cl'] * df.groupby('symbol')['adj_factor'].transform(lambda x: x.shift(-1).fillna(1).iloc[::-1].cumprod().iloc[::-1])
 
     dfs = []
     for symbol, df_symbol in df.groupby('symbol'):
