@@ -33,9 +33,23 @@ def fetch_df_market(symbols, min_timestamp):
         df_symbol = df_symbol.sort_values('timestamp')
         df_symbol = df_symbol.drop_duplicates("timestamp", keep="last")
 
-        def calc_opcl(df):
+        def calc_op_mocl(df):
             df = df.copy()
-            df["ret." + symbol] = df["cl"] / df["op"] - 1
+            df["ret." + symbol] = df["mo_cl"] / df["op"] - 1
+            df = df.dropna()
+            return df.set_index(["timestamp"])
+
+        def calc_mocl_afop(df):
+            df = df.copy()
+            df['timestamp'] += pd.to_timedelta(2 * 60 + 30, unit='minute')
+            df["ret." + symbol] = df["af_op"] / df["mo_cl"] - 1
+            df = df.dropna()
+            return df.set_index(["timestamp"])
+
+        def calc_afop_cl(df):
+            df = df.copy()
+            df['timestamp'] += pd.to_timedelta(3 * 60 + 30, unit='minute')
+            df["ret." + symbol] = df["cl"] / df["af_op"] - 1
             df = df.dropna()
             return df.set_index(["timestamp"])
 
@@ -49,7 +63,9 @@ def fetch_df_market(symbols, min_timestamp):
 
         dfs += [
             pd.concat([
-                calc_opcl(df_symbol)[["ret." + symbol]],
+                calc_op_mocl(df_symbol)[["ret." + symbol]],
+                calc_mocl_afop(df_symbol)[["ret." + symbol]],
+                calc_afop_cl(df_symbol)[["ret." + symbol]],
                 calc_clop(df_symbol)[["ret." + symbol]],
             ])
         ]
@@ -58,6 +74,25 @@ def fetch_df_market(symbols, min_timestamp):
     df = df.sort_index()
     df = df.fillna(0)
 
+    return df
+
+
+def _normalize_stock_pos(df):
+    def fill_time_shift(df, hour, shift_minutes):
+        idx = df.index
+        idx_src = idx[idx.get_level_values('timestamp').hour == hour]
+        idx_dest = idx_src.to_frame()
+        idx_dest['timestamp'] += pd.to_timedelta(shift_minutes, unit='minute')
+        idx_dest = pd.MultiIndex.from_frame(idx_dest)
+        dest_exists = idx_dest.isin(idx)
+        return pd.concat([
+            df,
+            df.loc[idx_src[~dest_exists]].set_index(idx_dest[~dest_exists]),
+        ])
+
+    df = fill_time_shift(df, 0, 2 * 60 + 30)
+    df = fill_time_shift(df, 2, 60)
+    df = df.sort_index()
     return df
 
 
@@ -92,14 +127,16 @@ def start():
 
         min_update_time = execution_time - pd.to_timedelta(2 * 28, unit="D")
         min_fetch_time = min_update_time - pd.to_timedelta(1, unit="D")
+        logger.info("min_update_time {}".format(min_update_time))
+        logger.info("min_fetch_time {}".format(min_fetch_time))
         df = client.get_positions(min_timestamp=min_fetch_time.timestamp())
 
         df = convert_to_old_format(df)
 
-        logger.info("min_update_time {}".format(min_update_time))
-        logger.info("min_fetch_time {}".format(min_fetch_time))
-
         df = preprocess_df(df, execution_time, inactive_days=7, disable_asfreq=True)
+
+        df = _normalize_stock_pos(df)
+
         # df = calc_portfolio_positions(df)
         def calc_equal_weighted(df):
             symbol_cols = [x for x in df.columns if x.startswith("p.")]
