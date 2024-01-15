@@ -10,7 +10,7 @@ from .processing import (
     convert_to_old_format
 )
 from .data_fetcher import DataFetcher
-from .utils import vacuum
+from .utils import vacuum, drop_table
 
 
 def fetch_df_market(symbols, min_timestamp):
@@ -53,10 +53,6 @@ def start():
     db = dataset.connect(database_url)
     client = Client(db)
 
-    analyzer_positions = db.create_table(
-        'analyzer_positions',
-        primary_type=db.types.bigint,
-    )
     analyzer_rets = db.create_table(
         'analyzer_rets',
         primary_type=db.types.bigint,
@@ -120,7 +116,11 @@ def start():
             ret_rows += df2.to_dict('records')
 
         with db:
-            analyzer_positions.delete(timestamp={ 'gte': min_update_time })
+            drop_table(database_url, 'analyzer_positions')
+            analyzer_positions = db.create_table(
+                'analyzer_positions',
+                primary_type=db.types.bigint,
+            )
             analyzer_positions.insert_many(position_rows)
             analyzer_rets.delete(timestamp={ 'gte': min_update_time })
             analyzer_rets.insert_many(ret_rows)
