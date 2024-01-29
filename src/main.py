@@ -77,7 +77,7 @@ def start():
         logger.info("min_update_time {}".format(min_update_time))
         logger.info("min_fetch_time {}".format(min_fetch_time))
 
-        df = preprocess_df(df, execution_time)
+        df = preprocess_df(df, execution_time, inactive_days=100000)
         df = calc_portfolio_positions(df)
         logger.debug(df)
 
