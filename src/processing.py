@@ -14,7 +14,8 @@ def calc_portfolio_positions(df):
             df2['model_id'] = model_id
             idx = pd.MultiIndex.from_frame(df2)
 
-            df.loc[:, symbol_cols] += df[col].values.reshape(-1, 1) * df.loc[idx, symbol_cols].values
+            idx_exists = idx.isin(df.index)
+            df.loc[df.index[idx_exists], symbol_cols] += df[col].values[idx_exists].reshape(-1, 1) * df.loc[idx[idx_exists], symbol_cols].values
     return df
 
 
