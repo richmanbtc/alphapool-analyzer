@@ -1,0 +1,5 @@
+numpy==1.26.4
+pandas==2.2.3
+psycopg2==2.9.10
+joblib==1.6.0
+google-cloud-bigquery[bqstorage,pandas]==3.27.0

@@ -1,36 +1,26 @@
-version: "3"
 services:
-  grafana:
-    image: grafana/grafana-oss
-    ports:
-      - '3000:3000'
-    volumes:
-      - ./dashboards/alphapool.js:/usr/share/grafana/public/dashboards/alphapool.js:ro
-    restart: always
-    environment:
-      - GF_SECURITY_ADMIN_USER=alphapool
-      - GF_SECURITY_ADMIN_PASSWORD
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_USERS_ALLOW_ORG_CREATE=false
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "32m"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  analyzer:
+  app:
     build: .
+    command: sleep infinity
+    init: true
     volumes:
-      - ./src:/app/src:ro
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-./LICENSE}:/google_credentials.json:ro
+      - .:/workspace
     environment:
-      ALPHAPOOL_DATABASE_URL: 'postgresql://postgres:password@host.docker.internal/postgres'
-      ALPHAPOOL_LOG_LEVEL: debug
-      GOOGLE_APPLICATION_CREDENTIALS: /google_credentials.json
-      ALPHAPOOL_DATASET: ${ALPHAPOOL_DATASET}
-    restart: always
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "32m"
+      PGHOST: postgres
+      PGUSER: postgres
+      PGDATABASE: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d postgres]
+      interval: 2s
+      timeout: 5s
+      retries: 30

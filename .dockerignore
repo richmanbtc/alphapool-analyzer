@@ -1,2 +1,10 @@
 .env
 .idea
+__pycache__
+.git
+.venv
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.py[cod]
+/benchmark-results/
