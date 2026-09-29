@@ -3,7 +3,7 @@ from functools import partial
 import pandas as pd
 
 from .analysis import calc_position_frame, calc_required_symbols, calc_return_frame, prepare_positions
-from .logger import create_logger
+from .logger import create_logger, log_execution_metrics
 from .market import fetch_market_returns, get_market_end
 from .processing import calc_model_ret, concat_market_returns
 from .result_writer import ResultWriter
@@ -72,18 +72,19 @@ def run_incremental(*, execution_time, read_progress, read_start, read_market_en
 
 def run(*, stock=False):
     logger = create_logger(get_config_value('log_level'))
-    database_url = get_config_value('database_url')
-    now = pd.Timestamp.now(tz='UTC')
-    # Only bars whose full time interval has elapsed are eligible.
-    settings = get_settings(stock)
-    market_limit = now.floor(settings.frequency) - pd.Timedelta(settings.frequency)
-    writer = ResultWriter()
-    run_incremental(
-        execution_time=now, stock=stock, logger=logger,
-        read_progress=writer.read_progress,
-        read_start=partial(get_position_start, database_url),
-        read_market_end=partial(get_market_end, market_limit.timestamp(), stock=stock),
-        read_positions=partial(get_position_range, database_url),
-        read_market=partial(fetch_market_returns, stock=stock, available_timestamp=market_limit.timestamp()),
-        write_results=writer.write,
-    )
+    with log_execution_metrics(logger):
+        database_url = get_config_value('database_url')
+        now = pd.Timestamp.now(tz='UTC')
+        # Only bars whose full time interval has elapsed are eligible.
+        settings = get_settings(stock)
+        market_limit = now.floor(settings.frequency) - pd.Timedelta(settings.frequency)
+        writer = ResultWriter()
+        run_incremental(
+            execution_time=now, stock=stock, logger=logger,
+            read_progress=writer.read_progress,
+            read_start=partial(get_position_start, database_url),
+            read_market_end=partial(get_market_end, market_limit.timestamp(), stock=stock),
+            read_positions=partial(get_position_range, database_url),
+            read_market=partial(fetch_market_returns, stock=stock, available_timestamp=market_limit.timestamp()),
+            write_results=writer.write,
+        )
