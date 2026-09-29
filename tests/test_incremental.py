@@ -26,51 +26,117 @@ class IncrementalTests(unittest.TestCase):
         )
         return reads, write
 
-    def test_initial_interval_uses_input_origin_and_empty_intervals_advance(self):
+    def test_initial_run_catches_up_across_empty_intervals(self):
         for stock, days in ((False, 1), (True, 7)):
             reads, write = self.run_once(None, origin=self.start, stock=stock)
-            self.assertEqual(write.call_args.args[2:4], (self.start, self.start + pd.Timedelta(days=days)))
-            self.assertEqual(reads.call_count, 1)
-            self.assertIsNone(write.call_args.kwargs['completed_until'])
-            self.assertTrue(write.call_args.args[0].empty)
+            cursor, completed = self.start, None
+            self.assertEqual(write.call_count, (40 + days - 1) // days)
+            self.assertEqual(reads.call_count, write.call_count)
+            for call in write.call_args_list:
+                end = min(cursor + pd.Timedelta(days=days), self.now)
+                self.assertEqual(call.args[2:4], (cursor, end))
+                self.assertEqual(call.kwargs['completed_until'], completed)
+                self.assertEqual(call.kwargs['retain_since'], write.call_args.kwargs['retain_since'])
+                self.assertTrue(call.args[0].empty)
+                cursor = completed = end
+            self.assertEqual(cursor, self.now)
 
     def test_checkpoint_accepts_bigquery_datetime_values(self):
         _, write = self.run_once(self.start.to_pydatetime())
-        self.assertEqual(write.call_args.args[2], self.start - pd.Timedelta(days=1))
-        self.assertEqual(write.call_args.args[3], self.start + pd.Timedelta(days=1))
+        first = write.call_args_list[0]
+        self.assertEqual(first.args[2], self.start - pd.Timedelta(days=1))
+        self.assertEqual(first.args[3], self.start + pd.Timedelta(days=1))
 
     def test_overlap_and_forward_progress_are_independent(self):
         settings = replace(CRYPTO, advance=pd.Timedelta(hours=3), overlap=pd.Timedelta(hours=1))
         with patch('src.runner.get_settings', return_value=settings):
-            _, write = self.run_once(self.start)
-        self.assertEqual(write.call_args.args[2:4],
+            _, write = self.run_once(self.start, available=self.start + pd.Timedelta(hours=5))
+        self.assertEqual(write.call_count, 2)
+        self.assertEqual(write.call_args_list[0].args[2:4],
                          (self.start - pd.Timedelta(hours=1), self.start + pd.Timedelta(hours=3)))
+        self.assertEqual(write.call_args_list[1].args[2:4],
+                         (self.start + pd.Timedelta(hours=3), self.start + pd.Timedelta(hours=5)))
 
     def test_no_input_does_not_create_progress(self):
         reads, write = self.run_once(None)
         reads.assert_not_called()
         write.assert_not_called()
 
-    def test_repeated_scheduled_runs_catch_up_across_long_empty_period(self):
-        progress = self.start
-        for _ in range(45):
-            _, write = self.run_once(progress)
-            start, end = write.call_args.args[2:4]
-            self.assertEqual(start, progress - pd.Timedelta(days=1))
-            self.assertLessEqual(end - progress, pd.Timedelta(days=1))
-            progress = max(progress, end)
-        self.assertEqual(progress, self.now)
+    def test_existing_progress_catches_up_with_overlap_only_once(self):
+        for stock, days in ((False, 1), (True, 7)):
+            _, write = self.run_once(self.start, stock=stock)
+            cursor = self.start
+            for i, call in enumerate(write.call_args_list):
+                start = cursor - pd.Timedelta(days=days) if i == 0 else cursor
+                end = min(cursor + pd.Timedelta(days=days), self.now)
+                self.assertEqual(call.args[2:4], (start, end))
+                self.assertEqual(call.kwargs['completed_until'], cursor)
+                cursor = end
+            self.assertEqual(cursor, self.now)
 
     def test_failures_do_not_skip_the_failed_interval(self):
         failing = Mock(side_effect=RuntimeError('commit failed'))
         with self.assertRaisesRegex(RuntimeError, 'commit failed'):
             self.run_once(self.start, writer=failing)
         _, retried = self.run_once(self.start)
-        self.assertEqual(failing.call_args.args[2:4], retried.call_args.args[2:4])
+        self.assertEqual(failing.call_args.args[2:4], retried.call_args_list[0].args[2:4])
+
+    def test_partial_initial_run_resumes_from_last_successful_commit(self):
+        for stock, days in ((False, 1), (True, 7)):
+            progress = None
+
+            def commit(*args, completed_until, **kwargs):
+                nonlocal progress
+                self.assertEqual(completed_until, progress)
+                if progress is not None:
+                    raise RuntimeError('commit failed')
+                progress = args[3]
+
+            failing = Mock(side_effect=commit)
+            with self.assertRaisesRegex(RuntimeError, 'commit failed'):
+                self.run_once(None, origin=self.start, stock=stock, writer=failing)
+            self.assertEqual(failing.call_count, 2)
+            self.assertEqual(progress, self.start + pd.Timedelta(days=days))
+            _, retried = self.run_once(progress, stock=stock)
+            first = retried.call_args_list[0]
+            self.assertEqual(first.kwargs['completed_until'], progress)
+            self.assertEqual(first.args[2], progress - pd.Timedelta(days=days))
+            self.assertEqual(first.args[3], failing.call_args.args[3])
+            self.assertEqual(retried.call_args.args[3], self.now)
+
+    def test_progress_and_market_boundary_are_read_once_per_run(self):
+        progress = Mock(return_value=self.start)
+        origin = Mock()
+        boundary = Mock(side_effect=[self.now, self.now + pd.Timedelta(days=1)])
+        writer = Mock()
+        run_incremental(
+            execution_time=self.now, read_progress=progress, read_start=origin,
+            read_market_end=boundary, read_positions=Mock(return_value=self.empty),
+            read_market=Mock(), write_results=writer, logger=Mock(),
+        )
+        progress.assert_called_once()
+        origin.assert_not_called()
+        boundary.assert_called_once()
+        self.assertEqual(writer.call_args.args[3], self.now)
+
+    def test_no_market_data_does_not_write_progress(self):
+        writer = Mock()
+        run_incremental(
+            execution_time=self.now, read_progress=Mock(return_value=None),
+            read_start=Mock(return_value=self.start), read_market_end=Mock(return_value=None),
+            read_positions=Mock(), read_market=Mock(), write_results=writer, logger=Mock(),
+        )
+        writer.assert_not_called()
+
+    def test_initial_run_at_market_boundary_does_not_write(self):
+        reads, write = self.run_once(None, origin=self.now)
+        reads.assert_not_called()
+        write.assert_not_called()
 
     def test_recent_overlap_stops_at_available_market_boundary(self):
         boundary = self.now - pd.Timedelta(hours=2)
         _, write = self.run_once(boundary, available=boundary)
+        write.assert_called_once()
         self.assertEqual(write.call_args.args[3], boundary)
         self.assertEqual(write.call_args.args[2], boundary - pd.Timedelta(days=1))
 

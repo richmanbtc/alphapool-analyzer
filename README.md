@@ -65,11 +65,17 @@ Incremental execution
   PostgreSQL `positions` table, even if older analyzer results already exist.
   No input rows means no checkpoint. Existing results outside the processed
   interval remain intact, except for position retention cleanup.
-- Each invocation processes exactly one interval, with no catch-up loop.
-  Crypto advances at most one day and reprocesses the previous day. Stock advances
-  at most seven days and reprocesses the previous seven days. During catch-up this
-  bounds the main input range to two or 14 days, plus boundary snapshots/prices.
-  The scheduler must run more frequently than the amount of history advanced.
+- Each invocation processes intervals until it reaches the completed market
+  boundary captured at startup. Crypto advances at most one day per interval;
+  stock advances at most seven days. With an existing checkpoint, only the first
+  interval reprocesses the previous day or seven days, respectively. Subsequent
+  intervals start at the preceding interval's end. This bounds the main input
+  range to two or 14 days, plus boundary snapshots/prices.
+  Results and progress commit after each interval, including empty intervals.
+  A failure stops the invocation; the next invocation resumes from the last
+  successful checkpoint and continues catching up. When already caught up, only
+  the overlap is reprocessed once. Execution time and retention cutoff stay fixed
+  throughout an invocation.
   `src/settings.py` defines per-mode retention, advance, overlap, and frequency.
   Position validity is a separate constant; equal durations are not coupled.
 - The end is capped by the latest available completed market timestamp. Crypto

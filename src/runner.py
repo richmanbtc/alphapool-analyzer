@@ -65,9 +65,13 @@ def run_incremental(*, execution_time, read_progress, read_start, read_market_en
     if end <= start:
         logger.info('No completed interval; skipping job')
         return
-    run_job(execution_time=execution_time, start_time=start, end_time=end,
-            read_positions=read_positions, read_market=read_market, write_results=write_results,
-            logger=logger, stock=stock, completed_until=completed)
+    while start < end:
+        run_job(execution_time=execution_time, start_time=start, end_time=end,
+                read_positions=read_positions, read_market=read_market, write_results=write_results,
+                logger=logger, stock=stock, completed_until=completed)
+        completed = end if completed is None else max(completed, end)
+        start = end
+        end = min(start + settings.advance, available)
 
 
 def run(*, stock=False):
